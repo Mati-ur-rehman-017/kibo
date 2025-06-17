@@ -123,6 +123,11 @@ public class YourService extends KiboRpcService {
             int bb=1;
             for (ObjectDetector.Detection det : detections) {
                 Log.i(TAG, "Area 1 Detection: " + det.toString());
+                if ("diamond".equals(det.className) ||
+                        "emerald".equals(det.className) ||
+                        "crystal".equals(det.className)) {
+                    continue; // Skip these target items
+                }
                 api.setAreaInfo(1,det.className,bb);
                 bb=bb+1;
             }
