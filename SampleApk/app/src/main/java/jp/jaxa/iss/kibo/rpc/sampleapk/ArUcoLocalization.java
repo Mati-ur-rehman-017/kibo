@@ -36,7 +36,7 @@ public class ArUcoLocalization {
             float markerSizeInMeters) {
 
         // 1. Detect ArUco markers in the image
-        Dictionary dictionary = Aruco.getPredefinedDictionary(Aruco.DICT_4X4_50);
+        Dictionary dictionary = Aruco.getPredefinedDictionary(Aruco.DICT_5X5_250);
         List<Mat> corners = new ArrayList<>();
         Mat ids = new Mat();
         Aruco.detectMarkers(inputImage, dictionary, corners, ids);
