@@ -8,38 +8,25 @@ import gov.nasa.arc.astrobee.types.Quaternion;
 import org.opencv.core.Mat;
 
 import java.util.List;
-import java.util.ArrayList;
-import java.util.Arrays;
-
-import org.opencv.aruco.Aruco;
-import org.opencv.aruco.DetectorParameters;
-import org.opencv.aruco.Dictionary;
-import org.opencv.core.Core;
-import org.opencv.core.Scalar;
-import org.opencv.utils.Converters;
 import org.opencv.imgproc.Imgproc;
-import org.opencv.core.CvType;
-import org.opencv.core.Size;
-import org.opencv.calib3d.Calib3d;
-
 import android.util.Log;
-import gov.nasa.arc.astrobee.Kinematics;
+import java.io.IOException;
+import java.util.Arrays; // Needed for Arrays.toString() and Arrays.asList()
 
-import java.io.IOException; // Added
-import java.util.List;
 /**
  * Class meant to handle commands from the Ground Data System and execute them in Astrobee.
  */
 
 public class YourService extends KiboRpcService {
-    private static final String TAG = "YourService"; // Added for logging
+    private static final String TAG = "YourService";
     private ObjectDetector yoloDetector;
-    private static final String YOLO_MODEL_NAME = "model.onnx"; // YOUR MODEL FILE NAME
-    private static final String YOLO_CLASSES_NAME = "custom.names";   // YOUR CLASSES FILE NAME
-    private static final int YOLO_INPUT_WIDTH = 640; // Common for YOLOv5
-    private static final int YOLO_INPUT_HEIGHT = 640;// Common for YOLOv5
-    private static final float YOLO_CONF_THRESHOLD = 0.6f; // Adjust as needed
-    private static final float YOLO_NMS_THRESHOLD = 0.65f; // Adjust as needed
+    private static final String YOLO_MODEL_NAME = "model.onnx";
+    private static final String YOLO_CLASSES_NAME = "custom.names";
+    private static final int YOLO_INPUT_WIDTH = 640;
+    private static final int YOLO_INPUT_HEIGHT = 640;
+    private static final float YOLO_CONF_THRESHOLD = 0.6f;
+    private static final float YOLO_NMS_THRESHOLD = 0.65f;
+
     static {
         try {
             System.loadLibrary(org.opencv.core.Core.NATIVE_LIBRARY_NAME);
@@ -51,9 +38,8 @@ public class YourService extends KiboRpcService {
 
     @Override
     protected void runPlan1(){
-        // The mission starts.
-
         api.startMission();
+
         if (yoloDetector == null) {
             try {
                 Log.i(TAG, "Initializing ObjectDetector...");
@@ -63,72 +49,61 @@ public class YourService extends KiboRpcService {
                 Log.i(TAG, "ObjectDetector initialized successfully.");
             } catch (IOException e) {
                 Log.e(TAG, "Failed to initialize ObjectDetector", e);
-//                api.notify QRCodeRecognizedFailed();
-//                return; // Or try to continue without detection
+                return;
             }
         }
         SymbolExtractor symbolExtractor = SymbolExtractor.create(api.getNavCamIntrinsics());
+
+        String[] targetItemsInArea = new String[4];
+
         // --- Area 1 ---
         Point point1 = new Point(10.9922d, -9.4623d, 5.2776d);
         Quaternion quat1 = new Quaternion(0f, 0f, -0.7071f, 0.7071f);
         api.moveTo(point1, quat1, false);
         Mat image1 = api.getMatNavCam();
         if(image1.empty()) {
-            Log.e("YourService", "Failed to get image from NavCam at Area 1.");
+            Log.e(TAG, "Failed to get image from NavCam at Area 1.");
         } else {
-            api.saveMatImage(image1, "nav_cam_image_area1.png");
-            Mat modifiedImage = symbolExtractor.extractSymbol(image1,101,false);
-            api.saveMatImage(modifiedImage, "nav_cam_image_area1_modified.png");
-            Log.i(TAG, "Performing detection on Area 1 image...");
-            Mat imageForYolo = new Mat(); // Create a new Mat for the BGR image
+            api.saveMatImage(image1, "nav_cam_image_area1_original.png");
+            Mat modifiedImage1 = symbolExtractor.extractSymbol(image1,101,false);
+            api.saveMatImage(modifiedImage1, "nav_cam_image_area1_modified.png");
 
-            if (modifiedImage.channels() == 1) {
-                Log.i(TAG, "modifiedImage is grayscale. Converting to BGR for YOLO.");
-                Imgproc.cvtColor(modifiedImage, imageForYolo, Imgproc.COLOR_GRAY2RGB);
-            }
-            api.saveMatImage(imageForYolo,"testing_image.png");
-
-            Mat imageToDetectOn = imageForYolo.clone(); // Clone for detection if original is needed
-            List<ObjectDetector.Detection> detections = yoloDetector.detect(imageToDetectOn);
-            Log.i(TAG, "Detections found: " + detections.size());
-
-            imageToDetectOn.release(); // Release the clone used ONLY for input to detect() if it was just for that.
-
-            Mat imageWithDetections = imageForYolo.clone();
-
-            if (detections != null && !detections.isEmpty()) {
-                Log.i(TAG, "Drawing " + detections.size() + " detections on the image.");
-                yoloDetector.drawDetections(imageWithDetections, detections); // Call the drawDetections method
-
-                // Save the image with detections
-                String outputImageName = "testing_image_with_detections.png";
-                try {
-                    // Assuming api.saveMatImage takes (Mat image, String filename)
-                    // and handles the necessary path conversion if needed (e.g., to external storage)
-                    api.saveMatImage(imageWithDetections, outputImageName);
-                    Log.i(TAG, "Image with detections saved as: " + outputImageName);
-                } catch (Exception e) {
-                    Log.e(TAG, "Error saving image with detections: " + outputImageName, e);
-                }
+            Mat imageForYolo1 = new Mat();
+            if (modifiedImage1.channels() == 1) {
+                Imgproc.cvtColor(modifiedImage1, imageForYolo1, Imgproc.COLOR_GRAY2RGB);
             } else {
-                Log.i(TAG, "No detections to draw.");
+                modifiedImage1.copyTo(imageForYolo1);
             }
+            api.saveMatImage(imageForYolo1, "nav_cam_image_area1_yolo_input.png");
 
-            imageWithDetections.release();
-            // Process detections
-            String detectedItemName = null;
-            int bb=1;
-            for (ObjectDetector.Detection det : detections) {
-                Log.i(TAG, "Area 1 Detection: " + det.toString());
-                if ("diamond".equals(det.className) ||
-                        "emerald".equals(det.className) ||
-                        "crystal".equals(det.className)) {
-                    continue; // Skip these target items
+            Mat imageToDetectOn1 = imageForYolo1.clone();
+            List<ObjectDetector.Detection> detections1 = yoloDetector.detect(imageToDetectOn1);
+            Log.i(TAG, "Area 1: Detections found: " + (detections1 != null ? detections1.size() : 0));
+            imageToDetectOn1.release();
+
+            if (detections1 != null && !detections1.isEmpty()) {
+                Mat imageWithDetections1 = imageForYolo1.clone();
+                yoloDetector.drawDetections(imageWithDetections1, detections1);
+                api.saveMatImage(imageWithDetections1, "nav_cam_image_area1_detections.png");
+                imageWithDetections1.release();
+
+                int itemIndexForSetAreaInfo1 = 1;
+                for (ObjectDetector.Detection det : detections1) {
+                    Log.i(TAG, "Area 1 Processing Detection: " + det.toString());
+                    if ("diamond".equals(det.className) ||
+                            "emerald".equals(det.className) ||
+                            "crystal".equals(det.className)) {
+                        targetItemsInArea[0] = det.className;
+                        Log.i(TAG, "Area 1: Target class item '" + det.className + "' identified.");
+                    } else {
+                        api.setAreaInfo(1, det.className, itemIndexForSetAreaInfo1);
+                        itemIndexForSetAreaInfo1++;
+                    }
                 }
-                api.setAreaInfo(1,det.className,bb);
-                bb=bb+1;
             }
-            // api.setAreaInfo(1, "item_name", 1);
+            imageForYolo1.release();
+            modifiedImage1.release();
+            image1.release();
         }
 
         // --- Area 2 ---
@@ -137,12 +112,48 @@ public class YourService extends KiboRpcService {
         api.moveTo(point2, quat2, true);
         Mat image2 = api.getMatNavCam();
         if(image2.empty()) {
-            Log.e("YourService", "Failed to get image from NavCam at Area 2.");
+            Log.e(TAG, "Failed to get image from NavCam at Area 2.");
         } else {
-            api.saveMatImage(image2, "nav_cam_image_area2.png");
+            api.saveMatImage(image2, "nav_cam_image_area2_original.png");
             Mat modifiedImage2 = symbolExtractor.extractSymbol(image2,102,false);
             api.saveMatImage(modifiedImage2, "nav_cam_image_area2_modified.png");
-            // api.setAreaInfo(2, "item_name", 1);
+
+            Mat imageForYolo2 = new Mat();
+            if (modifiedImage2.channels() == 1) {
+                Imgproc.cvtColor(modifiedImage2, imageForYolo2, Imgproc.COLOR_GRAY2RGB);
+            } else {
+                modifiedImage2.copyTo(imageForYolo2);
+            }
+            api.saveMatImage(imageForYolo2, "nav_cam_image_area2_yolo_input.png");
+
+            Mat imageToDetectOn2 = imageForYolo2.clone();
+            List<ObjectDetector.Detection> detections2 = yoloDetector.detect(imageToDetectOn2);
+            Log.i(TAG, "Area 2: Detections found: " + (detections2 != null ? detections2.size() : 0));
+            imageToDetectOn2.release();
+
+            if (detections2 != null && !detections2.isEmpty()) {
+                Mat imageWithDetections2 = imageForYolo2.clone();
+                yoloDetector.drawDetections(imageWithDetections2, detections2);
+                api.saveMatImage(imageWithDetections2, "nav_cam_image_area2_detections.png");
+                imageWithDetections2.release();
+
+                int itemIndexForSetAreaInfo2 = 1;
+                for (ObjectDetector.Detection det : detections2) {
+                    Log.i(TAG, "Area 2 Processing Detection: " + det.toString());
+                    if ("diamond".equals(det.className) ||
+                            "emerald".equals(det.className) ||
+                            "crystal".equals(det.className)) {
+                        targetItemsInArea[1] = det.className;
+                        Log.i(TAG, "Area 2: Target class item '" + det.className + "' identified.");
+                    } else {
+                        api.setAreaInfo(2, det.className, itemIndexForSetAreaInfo2);
+                        itemIndexForSetAreaInfo2++;
+                    }
+                }
+            }
+            imageForYolo2.release();
+            modifiedImage2.release();
+            image2.release();
         }
 
         // --- Area 3 ---
@@ -151,12 +162,48 @@ public class YourService extends KiboRpcService {
         api.moveTo(point3, quat3, false);
         Mat image3 = api.getMatNavCam();
         if(image3.empty()) {
-            Log.e("YourService", "Failed to get image from NavCam at Area 3.");
+            Log.e(TAG, "Failed to get image from NavCam at Area 3.");
         } else {
-            api.saveMatImage(image3, "nav_cam_image_area3.png");
+            api.saveMatImage(image3, "nav_cam_image_area3_original.png");
             Mat modifiedImage3 = symbolExtractor.extractSymbol(image3,103,false);
             api.saveMatImage(modifiedImage3, "nav_cam_image_area3_modified.png");
-            // api.setAreaInfo(3, "item_name", 1);
+
+            Mat imageForYolo3 = new Mat();
+            if (modifiedImage3.channels() == 1) {
+                Imgproc.cvtColor(modifiedImage3, imageForYolo3, Imgproc.COLOR_GRAY2RGB);
+            } else {
+                modifiedImage3.copyTo(imageForYolo3);
+            }
+            api.saveMatImage(imageForYolo3, "nav_cam_image_area3_yolo_input.png");
+
+            Mat imageToDetectOn3 = imageForYolo3.clone();
+            List<ObjectDetector.Detection> detections3 = yoloDetector.detect(imageToDetectOn3);
+            Log.i(TAG, "Area 3: Detections found: " + (detections3 != null ? detections3.size() : 0));
+            imageToDetectOn3.release();
+
+            if (detections3 != null && !detections3.isEmpty()) {
+                Mat imageWithDetections3 = imageForYolo3.clone();
+                yoloDetector.drawDetections(imageWithDetections3, detections3);
+                api.saveMatImage(imageWithDetections3, "nav_cam_image_area3_detections.png");
+                imageWithDetections3.release();
+
+                int itemIndexForSetAreaInfo3 = 1;
+                for (ObjectDetector.Detection det : detections3) {
+                    Log.i(TAG, "Area 3 Processing Detection: " + det.toString());
+                    if ("diamond".equals(det.className) ||
+                            "emerald".equals(det.className) ||
+                            "crystal".equals(det.className)) {
+                        targetItemsInArea[2] = det.className;
+                        Log.i(TAG, "Area 3: Target class item '" + det.className + "' identified.");
+                    } else {
+                        api.setAreaInfo(3, det.className, itemIndexForSetAreaInfo3);
+                        itemIndexForSetAreaInfo3++;
+                    }
+                }
+            }
+            imageForYolo3.release();
+            modifiedImage3.release();
+            image3.release();
         }
 
         // --- Area 4 ---
@@ -165,36 +212,140 @@ public class YourService extends KiboRpcService {
         api.moveTo(point4, quat4, false);
         Mat image4 = api.getMatNavCam();
         if(image4.empty()) {
-            Log.e("YourService", "Failed to get image from NavCam at Area 4.");
+            Log.e(TAG, "Failed to get image from NavCam at Area 4.");
         } else {
-            api.saveMatImage(image4, "nav_cam_image_area4.png");
+            api.saveMatImage(image4, "nav_cam_image_area4_original.png");
             Mat modifiedImage4 = symbolExtractor.extractSymbol(image4,104,false);
             api.saveMatImage(modifiedImage4, "nav_cam_image_area4_modified.png");
-            // api.setAreaInfo(4, "item_name", 1);
+
+            Mat imageForYolo4 = new Mat();
+            if (modifiedImage4.channels() == 1) {
+                Imgproc.cvtColor(modifiedImage4, imageForYolo4, Imgproc.COLOR_GRAY2RGB);
+            } else {
+                modifiedImage4.copyTo(imageForYolo4);
+            }
+            api.saveMatImage(imageForYolo4, "nav_cam_image_area4_yolo_input.png");
+
+            Mat imageToDetectOn4 = imageForYolo4.clone();
+            List<ObjectDetector.Detection> detections4 = yoloDetector.detect(imageToDetectOn4);
+            Log.i(TAG, "Area 4: Detections found: " + (detections4 != null ? detections4.size() : 0));
+            imageToDetectOn4.release();
+
+            if (detections4 != null && !detections4.isEmpty()) {
+                Mat imageWithDetections4 = imageForYolo4.clone();
+                yoloDetector.drawDetections(imageWithDetections4, detections4);
+                api.saveMatImage(imageWithDetections4, "nav_cam_image_area4_detections.png");
+                imageWithDetections4.release();
+
+                int itemIndexForSetAreaInfo4 = 1;
+                for (ObjectDetector.Detection det : detections4) {
+                    Log.i(TAG, "Area 4 Processing Detection: " + det.toString());
+                    if ("diamond".equals(det.className) ||
+                            "emerald".equals(det.className) ||
+                            "crystal".equals(det.className)) {
+                        targetItemsInArea[3] = det.className;
+                        Log.i(TAG, "Area 4: Target class item '" + det.className + "' identified.");
+                    } else {
+                        api.setAreaInfo(4, det.className, itemIndexForSetAreaInfo4);
+                        itemIndexForSetAreaInfo4++;
+                    }
+                }
+            }
+            imageForYolo4.release();
+            modifiedImage4.release();
+            image4.release();
         }
+
+        Log.i(TAG, "Target class items identified in areas 1-4: " + Arrays.toString(targetItemsInArea));
         api.reportRoundingCompletion();
 
         // --- Astronaut Recognition ---
+        String astronautSelectedItem = null; // Variable to store the item name selected by astronaut
+
         Point point5 = new Point(11.193,-6.5107,4.9654);
         Quaternion quat5 = new Quaternion(0f, 0f, 0.707f, 0.707f);
         api.moveTo(point5, quat5, false);
         Mat image5 = api.getMatNavCam();
-        if(image5.empty()) {
-            Log.e("YourService", "Failed to get image from NavCam at Astronaut Recognition.");
+
+        if (image5.empty()) {
+            Log.e(TAG, "Astronaut Recognition: Failed to get image from NavCam.");
         } else {
-            api.saveMatImage(image5, "nav_cam_image_astronaut_recognition.png");
-            Mat modifiedImage5 = symbolExtractor.extractSymbol(image5,100,true);
+            api.saveMatImage(image5, "nav_cam_image_astronaut_recognition_original.png");
+            Mat modifiedImage5 = symbolExtractor.extractSymbol(image5, 100, true);
             api.saveMatImage(modifiedImage5, "nav_cam_image_astronaut_recognition_modified.png");
-            // api.setAreaInfo(5, "item_name", 1);
+
+            if (modifiedImage5 == null || modifiedImage5.empty()) {
+                Log.e(TAG, "Astronaut Recognition: modifiedImage5 is null or empty after symbol extraction.");
+            } else {
+                Mat imageForYolo5 = new Mat();
+                if (modifiedImage5.channels() == 1) {
+                    Imgproc.cvtColor(modifiedImage5, imageForYolo5, Imgproc.COLOR_GRAY2RGB);
+                } else {
+                    modifiedImage5.copyTo(imageForYolo5);
+                }
+                api.saveMatImage(imageForYolo5, "nav_cam_image_astronaut_yolo_input.png");
+
+                Mat imageToDetectOn5 = imageForYolo5.clone();
+                List<ObjectDetector.Detection> detections5 = yoloDetector.detect(imageToDetectOn5);
+                Log.i(TAG, "Astronaut Recognition: Detections on modified image: " + (detections5 != null ? detections5.size() : 0));
+                imageToDetectOn5.release();
+
+                if (detections5 != null && !detections5.isEmpty()) {
+                    ObjectDetector.Detection localBestAstronautDetection = null; // Renamed to avoid confusion, local to this block
+                    float maxPrimaryConf = 0f;
+                    for (ObjectDetector.Detection det : detections5) {
+                        if (("diamond".equals(det.className) ||
+                                "emerald".equals(det.className) ||
+                                "crystal".equals(det.className)) && det.confidence > maxPrimaryConf) {
+                            localBestAstronautDetection = det;
+                            maxPrimaryConf = det.confidence;
+                        }
+                    }
+
+                    if (localBestAstronautDetection != null) {
+                        astronautSelectedItem = localBestAstronautDetection.className;
+                        Log.i(TAG, "Astronaut selected item determined: " + astronautSelectedItem + " (Confidence: " + localBestAstronautDetection.confidence + ")");
+
+                        Mat imageWithAstronautDetection = imageForYolo5.clone();
+                        List<ObjectDetector.Detection> singleDetectionList = Arrays.asList(localBestAstronautDetection);
+                        yoloDetector.drawDetections(imageWithAstronautDetection, singleDetectionList);
+                        api.saveMatImage(imageWithAstronautDetection, "nav_cam_image_astronaut_best_detection.png");
+                        imageWithAstronautDetection.release();
+                    } else {
+                        Log.w(TAG, "Astronaut Recognition: No primary target (diamond, emerald, crystal) detected, or other items not considered.");
+                    }
+                } else {
+                    Log.w(TAG, "Astronaut Recognition: No items detected in the (modified) astronaut image.");
+                }
+                imageForYolo5.release();
+            }
+            if (modifiedImage5 != null) modifiedImage5.release();
+            image5.release();
         }
-        // Continue with the rest of your mission
-        api.notifyRecognitionItem();
-        api.takeTargetItemSnapshot();
+
+        int reqArea = 1;
+        if (astronautSelectedItem != null) {
+            for (int i = 0; i < targetItemsInArea.length; i++) {
+                if (astronautSelectedItem.equals(targetItemsInArea[i])) {
+                    reqArea = i + 1;
+                    Log.i(TAG, "Astronaut's selected item '" + astronautSelectedItem + "' matches item from Area " + reqArea);
+                    break;
+                }
+            }
+            if (reqArea == 1) {
+                Log.i(TAG, "Astronaut's selected item '" + astronautSelectedItem + "' does not match any of the special items in Areas 1-4: " + Arrays.toString(targetItemsInArea));
+            }
+        } else {
+            Log.w(TAG, "Cannot determine required area because no specific item was identified for the astronaut.");
+        }
+
+        api.notifyRecognitionItem(); // Indicates failure to recognize a *specific* item or no primary target chosen
+        api.takeTargetItemSnapshot(); // Takes snapshot of current view
     }
 
     @Override
     protected void runPlan2(){
-       // write your plan 2 here.
+        // write your plan 2 here.
     }
 
     @Override
