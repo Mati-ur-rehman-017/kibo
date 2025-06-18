@@ -352,4 +352,23 @@ public class YourService extends KiboRpcService {
     protected void runPlan3(){
         // write your plan 3 here.
     }
+
+    private Mat extractSymbolFromCam(boolean isAstronaut,int targetId) {
+        Mat image = api.getMatNavCam();
+        for(int i = 0; i < 3 && image.empty(); i++) {
+            Log.i(TAG, "Retrying to get image from NavCam, attempt " + (i + 1));
+            image = api.getMatNavCam();
+        }
+        if (image.empty()) {
+            Log.e(TAG, "Failed to get image from NavCam for symbol extraction.");
+            return null;
+        }
+        Mat modifiedImage = symbolExtractor.extractSymbol(image, targetId, isAstronaut);
+        if (modifiedImage.empty()) {
+            Log.e(TAG, "Failed to extract symbol from NavCam image.");
+            return null;
+        }
+        api.saveMatImage(modifiedImage, "nav_cam_image" + targetId + ".png");
+        return modifiedImage;
+    }
 }

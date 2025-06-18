@@ -69,6 +69,10 @@ public class SymbolExtractor {
     private Mat flattenImage(Mat image) {
         Mat flattenedImage = new Mat();
         Calib3d.undistort(image, flattenedImage, cameraMatrix, distCoeffs);
+        if(flattenedImage.empty()) {
+            Log.e(TAG, "Failed to flatten the image. Returning original.");
+            return image; // Return original if undistortion fails
+        }
         Log.d(TAG, "Image flattened successfully.");
         return flattenedImage;
     }
@@ -138,6 +142,10 @@ public class SymbolExtractor {
 
         Mat resized = new Mat();
         org.opencv.imgproc.Imgproc.resize(whiteBg, resized, new org.opencv.core.Size(whiteBg.cols() * 3, whiteBg.rows() * 3));
+        if(resized.empty()) {
+            Log.e(TAG, "Failed to resize the cropped image.");
+            return image; // Return original if resizing fails
+        }
         return resized;
     }
 
@@ -164,7 +172,12 @@ public class SymbolExtractor {
         }
 
         if (markerIndex == -1) {
-            Log.e("YourService", "ARuco marker with ID 101 not found.");
+            Log.e("YourService", "Target marker with ID " + targetID + " not found for straightening.");
+            ids.release(); // Release the empty Mat
+            for (Mat cornerMat : corners) {
+                cornerMat.release();
+            }
+            Log.e("YourService", "Returning original image.");
             return image; // Return original if target marker not found
         }
 
@@ -248,8 +261,10 @@ public class SymbolExtractor {
         perspectiveMatrix.release();
         translationMatrix.release();
         finalTransformMatrix.release();
-
-
+        if(straightenedImage.empty()) {
+            Log.e(TAG, "Failed to straighten the image. Returning original.");
+            return image; // Return original if warping fails
+        }
         return straightenedImage;
     }
     /**
@@ -354,7 +369,10 @@ public class SymbolExtractor {
         for (Mat cornerMat : corners) {
             cornerMat.release();
         }
-
+        if(croppedImage.empty()) {
+            Log.e("ArucoCrop", "Failed to crop the image. Returning original image.");
+            return inputImage; // Return original if cropping fails
+        }
         return croppedImage;
     }
     
@@ -362,7 +380,7 @@ public class SymbolExtractor {
         Mat flatImage = flattenImage(inputImage);
         if (flatImage.empty()) {
             Log.e("YourService", "Failed to flatten the image.");
-            return null; // Fail quietly
+            return null;
         }
         Mat cropImage = flatImage;
         if(!isAstronaut) {
