@@ -11,6 +11,7 @@ import java.util.List;
 import org.opencv.imgproc.Imgproc;
 import android.util.Log;
 import java.io.IOException;
+import java.lang.invoke.WrongMethodTypeException;
 import java.util.Arrays; // Needed for Arrays.toString() and Arrays.asList()
 
 /**
@@ -26,6 +27,7 @@ public class YourService extends KiboRpcService {
     private static final int YOLO_INPUT_HEIGHT = 640;
     private static final float YOLO_CONF_THRESHOLD = 0.6f;
     private static final float YOLO_NMS_THRESHOLD = 0.65f;
+    private static SymbolExtractor symbolExtractor;
 
     static {
         try {
@@ -52,27 +54,26 @@ public class YourService extends KiboRpcService {
                 return;
             }
         }
-        SymbolExtractor symbolExtractor = SymbolExtractor.create(api.getNavCamIntrinsics());
+        symbolExtractor = SymbolExtractor.create(api.getNavCamIntrinsics());
 
         String[] targetItemsInArea = new String[4];
 
+        WorldPose[] locations = {new WorldPose(new Point(10.9922d, -9.4623d, 5.2776d),new Quaternion(0f, 0f, -0.7071f, 0.7071f)),
+                                new WorldPose(new Point(11.0528d, -8.97148d, 4.87973d), new Quaternion(0f, 0.707f, 0f, 0.707f)),
+                                new WorldPose(new Point(11.0106d, -7.8828d, 4.87863d), new Quaternion(0f, 0.707f, 0f, 0.707f)),
+                                new WorldPose(new Point(10.984684d, -6.8947d, 5.0276d), new Quaternion(0f, 0f, 1f, 0f))};
         // --- Area 1 ---
-        Point point1 = new Point(10.9922d, -9.4623d, 5.2776d);
-        Quaternion quat1 = new Quaternion(0f, 0f, -0.7071f, 0.7071f);
-        api.moveTo(point1, quat1, false);
-        Mat image1 = api.getMatNavCam();
-        if(image1.empty()) {
+        Integer[] ids = {101,102,103,104};
+        moveTo(locations[0]);
+        Mat imageArea1 = extractSymbolFromCam(false, ids[0]);
+        if(imageArea1.empty()) {
             Log.e(TAG, "Failed to get image from NavCam at Area 1.");
         } else {
-            api.saveMatImage(image1, "nav_cam_image_area1_original.png");
-            Mat modifiedImage1 = symbolExtractor.extractSymbol(image1,101,false);
-            api.saveMatImage(modifiedImage1, "nav_cam_image_area1_modified.png");
-
             Mat imageForYolo1 = new Mat();
-            if (modifiedImage1.channels() == 1) {
-                Imgproc.cvtColor(modifiedImage1, imageForYolo1, Imgproc.COLOR_GRAY2RGB);
+            if (imageArea1.channels() == 1) {
+                Imgproc.cvtColor(imageArea1, imageForYolo1, Imgproc.COLOR_GRAY2RGB);
             } else {
-                modifiedImage1.copyTo(imageForYolo1);
+                imageArea1.copyTo(imageForYolo1);
             }
             api.saveMatImage(imageForYolo1, "nav_cam_image_area1_yolo_input.png");
 
@@ -102,27 +103,20 @@ public class YourService extends KiboRpcService {
                 }
             }
             imageForYolo1.release();
-            modifiedImage1.release();
-            image1.release();
+            imageArea1.release();
         }
 
         // --- Area 2 ---
-        Point point2 = new Point(11.0528d, -8.97148d, 4.87973d);
-        Quaternion quat2 = new Quaternion(0f, 0.707f, 0f, 0.707f);
-        api.moveTo(point2, quat2, true);
-        Mat image2 = api.getMatNavCam();
-        if(image2.empty()) {
+        moveTo(locations[1]);
+        Mat imageArea2 = extractSymbolFromCam(false, ids[1]);
+        if(imageArea2.empty()) {
             Log.e(TAG, "Failed to get image from NavCam at Area 2.");
         } else {
-            api.saveMatImage(image2, "nav_cam_image_area2_original.png");
-            Mat modifiedImage2 = symbolExtractor.extractSymbol(image2,102,false);
-            api.saveMatImage(modifiedImage2, "nav_cam_image_area2_modified.png");
-
             Mat imageForYolo2 = new Mat();
-            if (modifiedImage2.channels() == 1) {
-                Imgproc.cvtColor(modifiedImage2, imageForYolo2, Imgproc.COLOR_GRAY2RGB);
+            if (imageArea2.channels() == 1) {
+                Imgproc.cvtColor(imageArea2, imageForYolo2, Imgproc.COLOR_GRAY2RGB);
             } else {
-                modifiedImage2.copyTo(imageForYolo2);
+                imageArea2.copyTo(imageForYolo2);
             }
             api.saveMatImage(imageForYolo2, "nav_cam_image_area2_yolo_input.png");
 
@@ -152,27 +146,20 @@ public class YourService extends KiboRpcService {
                 }
             }
             imageForYolo2.release();
-            modifiedImage2.release();
-            image2.release();
+            imageArea2.release();
         }
 
         // --- Area 3 ---
-        Point point3 = new Point(11.0106d, -7.8828d, 4.87863d);
-        Quaternion quat3 = new Quaternion(0f, 0.707f, 0f, 0.707f);
-        api.moveTo(point3, quat3, false);
-        Mat image3 = api.getMatNavCam();
-        if(image3.empty()) {
+        moveTo(locations[2]);
+        Mat imageArea3 = extractSymbolFromCam(false, ids[2]);
+        if(imageArea3.empty()) {
             Log.e(TAG, "Failed to get image from NavCam at Area 3.");
         } else {
-            api.saveMatImage(image3, "nav_cam_image_area3_original.png");
-            Mat modifiedImage3 = symbolExtractor.extractSymbol(image3,103,false);
-            api.saveMatImage(modifiedImage3, "nav_cam_image_area3_modified.png");
-
             Mat imageForYolo3 = new Mat();
-            if (modifiedImage3.channels() == 1) {
-                Imgproc.cvtColor(modifiedImage3, imageForYolo3, Imgproc.COLOR_GRAY2RGB);
+            if (imageArea3.channels() == 1) {
+                Imgproc.cvtColor(imageArea3, imageForYolo3, Imgproc.COLOR_GRAY2RGB);
             } else {
-                modifiedImage3.copyTo(imageForYolo3);
+                imageArea3.copyTo(imageForYolo3);
             }
             api.saveMatImage(imageForYolo3, "nav_cam_image_area3_yolo_input.png");
 
@@ -202,27 +189,20 @@ public class YourService extends KiboRpcService {
                 }
             }
             imageForYolo3.release();
-            modifiedImage3.release();
-            image3.release();
+            imageArea3.release();
         }
 
         // --- Area 4 ---
-        Point point4 = new Point(10.984684d, -6.8947d, 5.0276d);
-        Quaternion quat4 = new Quaternion(0f, 0f, 1f, 0f);
-        api.moveTo(point4, quat4, false);
-        Mat image4 = api.getMatNavCam();
-        if(image4.empty()) {
+        moveTo(locations[3]);
+        Mat imageArea4 = extractSymbolFromCam(false, ids[3]);
+        if(imageArea4.empty()) {
             Log.e(TAG, "Failed to get image from NavCam at Area 4.");
         } else {
-            api.saveMatImage(image4, "nav_cam_image_area4_original.png");
-            Mat modifiedImage4 = symbolExtractor.extractSymbol(image4,104,false);
-            api.saveMatImage(modifiedImage4, "nav_cam_image_area4_modified.png");
-
             Mat imageForYolo4 = new Mat();
-            if (modifiedImage4.channels() == 1) {
-                Imgproc.cvtColor(modifiedImage4, imageForYolo4, Imgproc.COLOR_GRAY2RGB);
+            if (imageArea4.channels() == 1) {
+                Imgproc.cvtColor(imageArea4, imageForYolo4, Imgproc.COLOR_GRAY2RGB);
             } else {
-                modifiedImage4.copyTo(imageForYolo4);
+                imageArea4.copyTo(imageForYolo4);
             }
             api.saveMatImage(imageForYolo4, "nav_cam_image_area4_yolo_input.png");
 
@@ -252,8 +232,7 @@ public class YourService extends KiboRpcService {
                 }
             }
             imageForYolo4.release();
-            modifiedImage4.release();
-            image4.release();
+            imageArea4.release();
         }
 
         Log.i(TAG, "Target class items identified in areas 1-4: " + Arrays.toString(targetItemsInArea));
@@ -261,27 +240,21 @@ public class YourService extends KiboRpcService {
 
         // --- Astronaut Recognition ---
         String astronautSelectedItem = null; // Variable to store the item name selected by astronaut
+        WorldPose astronautLocation = new WorldPose(new Point(11.193,-6.5107,4.9654), new Quaternion(0f, 0f, 0.707f, 0.7f));
+        moveTo(astronautLocation);
+        Mat targetImage = extractSymbolFromCam(true, 100);
 
-        Point point5 = new Point(11.193,-6.5107,4.9654);
-        Quaternion quat5 = new Quaternion(0f, 0f, 0.707f, 0.707f);
-        api.moveTo(point5, quat5, false);
-        Mat image5 = api.getMatNavCam();
-
-        if (image5.empty()) {
+        if (targetImage.empty()) {
             Log.e(TAG, "Astronaut Recognition: Failed to get image from NavCam.");
         } else {
-            api.saveMatImage(image5, "nav_cam_image_astronaut_recognition_original.png");
-            Mat modifiedImage5 = symbolExtractor.extractSymbol(image5, 100, true);
-            api.saveMatImage(modifiedImage5, "nav_cam_image_astronaut_recognition_modified.png");
-
-            if (modifiedImage5 == null || modifiedImage5.empty()) {
-                Log.e(TAG, "Astronaut Recognition: modifiedImage5 is null or empty after symbol extraction.");
+            if (targetImage == null || targetImage.empty()) {
+                Log.e(TAG, "Astronaut Recognition: targetImage is null or empty after symbol extraction.");
             } else {
                 Mat imageForYolo5 = new Mat();
-                if (modifiedImage5.channels() == 1) {
-                    Imgproc.cvtColor(modifiedImage5, imageForYolo5, Imgproc.COLOR_GRAY2RGB);
+                if (targetImage.channels() == 1) {
+                    Imgproc.cvtColor(targetImage, imageForYolo5, Imgproc.COLOR_GRAY2RGB);
                 } else {
-                    modifiedImage5.copyTo(imageForYolo5);
+                    targetImage.copyTo(imageForYolo5);
                 }
                 api.saveMatImage(imageForYolo5, "nav_cam_image_astronaut_yolo_input.png");
 
@@ -319,8 +292,7 @@ public class YourService extends KiboRpcService {
                 }
                 imageForYolo5.release();
             }
-            if (modifiedImage5 != null) modifiedImage5.release();
-            image5.release();
+            if (targetImage != null) targetImage.release();
         }
 
         int reqArea = 1;
@@ -363,6 +335,7 @@ public class YourService extends KiboRpcService {
             Log.e(TAG, "Failed to get image from NavCam for symbol extraction.");
             return null;
         }
+        api.saveMatImage(image, "nav_cam_original_image" + targetId + ".png");
         Mat modifiedImage = symbolExtractor.extractSymbol(image, targetId, isAstronaut);
         if (modifiedImage.empty()) {
             Log.e(TAG, "Failed to extract symbol from NavCam image.");
@@ -370,5 +343,12 @@ public class YourService extends KiboRpcService {
         }
         api.saveMatImage(modifiedImage, "nav_cam_image" + targetId + ".png");
         return modifiedImage;
+    }
+
+    private void moveTo(WorldPose location) {
+        for(int i = 0;i < 3;i++) {
+            if(api.moveTo(location.position,location.orientation,false).hasSucceeded())
+                return;
+        }
     }
 }
