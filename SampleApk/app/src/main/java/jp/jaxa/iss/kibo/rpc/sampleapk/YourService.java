@@ -4,8 +4,14 @@ import jp.jaxa.iss.kibo.rpc.api.KiboRpcService;
 
 import gov.nasa.arc.astrobee.types.Point;
 import gov.nasa.arc.astrobee.types.Quaternion;
+import gov.nasa.arc.astrobee.Kinematics;
 
 import org.opencv.core.Mat;
+import org.opencv.aruco.Aruco;
+import org.opencv.aruco.DetectorParameters;
+import org.opencv.aruco.Dictionary;
+import org.opencv.core.CvType;
+
 
 import java.util.List;
 import org.opencv.imgproc.Imgproc;
@@ -13,6 +19,7 @@ import android.util.Log;
 import java.io.IOException;
 import java.lang.invoke.WrongMethodTypeException;
 import java.util.Arrays; // Needed for Arrays.toString() and Arrays.asList()
+import java.util.ArrayList;
 
 /**
  * Class meant to handle commands from the Ground Data System and execute them in Astrobee.
@@ -28,6 +35,10 @@ public class YourService extends KiboRpcService {
     private static final float YOLO_CONF_THRESHOLD = 0.6f;
     private static final float YOLO_NMS_THRESHOLD = 0.65f;
     private static SymbolExtractor symbolExtractor;
+    private static Mat cameraMatrix;
+    private static Mat distCoeffs;
+    private static WorldPose[] finalLocations = new WorldPose[4];
+    private static WorldPose[] locations = new WorldPose[4];
 
     static {
         try {
@@ -56,12 +67,13 @@ public class YourService extends KiboRpcService {
         }
         symbolExtractor = SymbolExtractor.create(api.getNavCamIntrinsics());
 
+        intrinsicsToMat(api.getNavCamIntrinsics(), true);
         String[] targetItemsInArea = new String[4];
 
-        WorldPose[] locations = {new WorldPose(new Point(10.9922d, -9.4623d, 5.2776d),new Quaternion(0f, 0f, -0.7071f, 0.7071f)),
-                                new WorldPose(new Point(11.0528d, -8.97148d, 4.87973d), new Quaternion(0f, 0.707f, 0f, 0.707f)),
-                                new WorldPose(new Point(11.0106d, -7.8828d, 4.87863d), new Quaternion(0f, 0.707f, 0f, 0.707f)),
-                                new WorldPose(new Point(10.984684d, -6.8947d, 5.0276d), new Quaternion(0f, 0f, 1f, 0f))};
+        locations[0] = new WorldPose(new Point(10.9922d, -9.4623d, 5.2776d),new Quaternion(0f, 0f, -0.5f, 0.5f));
+        locations[1] = new WorldPose(new Point(11.0106d, -8.97148d, 4.97973d), new Quaternion(0f, 0.707f, 0f, 0.707f));
+        locations[2] = new WorldPose(new Point(11.0106d, -7.8828d, 4.87863d), new Quaternion(0f, 0.707f, 0f, 0.707f));
+        locations[3] = new WorldPose(new Point(10.984684d, -6.8947d, 5.0276d), new Quaternion(0f, 0f, 1f, 0f));
         // --- Area 1 ---
         Integer[] ids = {101,102,103,104};
         moveTo(locations[0]);
@@ -310,7 +322,8 @@ public class YourService extends KiboRpcService {
         } else {
             Log.w(TAG, "Cannot determine required area because no specific item was identified for the astronaut.");
         }
-
+        moveTo(finalLocations[reqArea-1]);
+        api.saveMatImage(api.getMatNavCam(), "nav_cam_image_area1_final.png");
         api.notifyRecognitionItem(); // Indicates failure to recognize a *specific* item or no primary target chosen
         api.takeTargetItemSnapshot(); // Takes snapshot of current view
     }
@@ -336,6 +349,8 @@ public class YourService extends KiboRpcService {
             return null;
         }
         api.saveMatImage(image, "nav_cam_original_image" + targetId + ".png");
+        if(targetId > 100)
+            findFinalLocation(image, targetId);
         Mat modifiedImage = symbolExtractor.extractSymbol(image, targetId, isAstronaut);
         if (modifiedImage.empty()) {
             Log.e(TAG, "Failed to extract symbol from NavCam image.");
@@ -350,5 +365,106 @@ public class YourService extends KiboRpcService {
             if(api.moveTo(location.position,location.orientation,false).hasSucceeded())
                 return;
         }
+    }
+
+    private void intrinsicsToMat(double[][] intrinsics,boolean isSimulation) {
+        double[] cameraMatrixData = new double[9];
+        double[] distCoeffsData = new double[5];
+        if (intrinsics == null || intrinsics.length < 2 || intrinsics[0].length != 9 || intrinsics[1].length < 5) {
+            Log.e("FlattenImage", "Invalid camera intrinsics received. Using default.");
+            if(isSimulation) {
+                cameraMatrixData = new double[]{
+                    523.105750, 0.000000, 635.434258,
+                    0.000000, 534.765913, 500.335102,
+                    0.000000, 0.000000, 1.000000
+                };
+                distCoeffsData = new double[]{-0.164787, 0.020375, -0.001572, -0.000369, 0.000000};
+            } else {
+                cameraMatrixData = new double[]{
+                    608.8073, 0.0, 632.53684,
+                    0.0, 607.61439, 549.08386,
+                    0.0, 0.0, 1.0
+                };
+                distCoeffsData = new double[]{-0.212191, 0.073843, -0.000918, 0.001890, 0.0};
+            }
+        } else {
+            System.arraycopy(intrinsics[0], 0, cameraMatrixData, 0, 9);
+            System.arraycopy(intrinsics[1], 0, distCoeffsData, 0, 5);
+        }
+        // Use local variables for initialization
+        cameraMatrix = new Mat(3, 3, CvType.CV_64F);
+        cameraMatrix.put(0, 0, cameraMatrixData);
+        distCoeffs = new Mat(1, 5, CvType.CV_64F);
+        distCoeffs.put(0, 0, distCoeffsData);
+    }
+
+    private void findFinalLocation(Mat image, int targetId) {
+        if (image == null || image.empty()) {
+            Log.e("ARucoPose", "Input image is null or empty.");
+            return;
+        }
+        int areaId = targetId - 100;
+        double[] distance = estimateArucoPose(image, targetId);;
+        Point currentPosition = locations[areaId-1].position;
+        Quaternion currentOrientation = locations[areaId-1].orientation;
+        if(areaId == 1) {
+            double x = currentPosition.getX() + distance[0];
+            double y = currentPosition.getY() - distance[2] + 0.7;
+            double z = currentPosition.getZ() + distance[1];
+            finalLocations[0] = new WorldPose(new Point(x, y, z), currentOrientation);
+            Log.i("ARucoPose", String.format("Final Location for Area 1: X=%.3f m, Y=%.3f m, Z=%.3f m",
+                    x, y, z));
+        }
+        if(areaId == 2 || areaId == 3) {
+            double x = currentPosition.getX() - distance[1];
+            double y = currentPosition.getY() + distance[0];
+            double z = currentPosition.getZ() - distance[2] + 0.7;
+            finalLocations[areaId-1] = new WorldPose(new Point(x, y, z), currentOrientation);
+            Log.i("ARucoPose", String.format("Final Location for Area 2/3: X=%.3f m, Y=%.3f m, Z=%.3f m",
+                    x, y, z));
+        }
+        if(areaId == 4) {
+            double x = currentPosition.getX() - distance[2] + 0.7;
+            double y = currentPosition.getY() + distance[0];
+            double z = currentPosition.getZ() + distance[1];
+            finalLocations[3] = new WorldPose(new Point(x, y, z), currentOrientation);
+            Log.i("ARucoPose", String.format("Final Location for Area 4: X=%.3f m, Y=%.3f m, Z=%.3f m",
+                    x, y, z));
+        }
+    }
+
+    private static double[] estimateArucoPose(Mat image, int targetId) {
+        Dictionary arucoDict = Aruco.getPredefinedDictionary(Aruco.DICT_5X5_250);
+        DetectorParameters parameters = DetectorParameters.create();
+
+        List<Mat> corners = new ArrayList<>();
+        Mat ids = new Mat();
+
+        // Detect markers
+        Aruco.detectMarkers(image, arucoDict, corners, ids, parameters);
+        Log.i("ARucoPose", "Detected " + ids.rows() + " ArUco markers.");
+        if (!ids.empty()) {
+            float markerLength = 0.05f;  // Marker size in meters (5 cm)
+            Mat rvecs = new Mat();
+            Mat tvecs = new Mat();
+
+            Aruco.estimatePoseSingleMarkers(corners, markerLength, cameraMatrix, distCoeffs, rvecs, tvecs);
+
+            for (int i = 0; i < ids.rows(); i++) {
+                int markerId = (int) ids.get(i, 0)[0];
+
+                if (markerId == targetId) {
+                    double[] tvec = tvecs.row(i).get(0, 0);  // 1x3 vector
+                    Log.e("ARucoPose", String.format("Marker ID %d 3D Position (Camera Coordinates): X=%.3f m, Y=%.3f m, Z=%.3f m",
+                            markerId, tvec[0], tvec[1], tvec[2]));
+                    return tvec;
+                }
+            }
+
+            Log.e("ARucoPose","Target ArUco ID not found in image.");
+        } else {
+            Log.e("ARucoPose","No ArUco markers detected.");
+        }
+        return new double[]{0.0, 0.0, 0.0};
     }
 }
