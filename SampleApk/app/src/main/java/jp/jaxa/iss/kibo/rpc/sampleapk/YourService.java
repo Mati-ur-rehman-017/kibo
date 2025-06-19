@@ -70,7 +70,7 @@ public class YourService extends KiboRpcService {
         intrinsicsToMat(api.getNavCamIntrinsics(), true);
         String[] targetItemsInArea = new String[4];
 
-        locations[0] = new WorldPose(new Point(10.9922d, -9.4623d, 5.2776d),new Quaternion(0f, 0f, -0.5f, 0.5f));
+        locations[0] = new WorldPose(new Point(10.9922d, -9.4623d, 5.2776d),new Quaternion(0f, 0f, -0.7071f, 0.7071f));
         locations[1] = new WorldPose(new Point(11.0106d, -8.97148d, 4.97973d), new Quaternion(0f, 0.707f, 0f, 0.707f));
         locations[2] = new WorldPose(new Point(11.0106d, -7.8828d, 4.87863d), new Quaternion(0f, 0.707f, 0f, 0.707f));
         locations[3] = new WorldPose(new Point(10.984684d, -6.8947d, 5.0276d), new Quaternion(0f, 0f, 1f, 0f));
