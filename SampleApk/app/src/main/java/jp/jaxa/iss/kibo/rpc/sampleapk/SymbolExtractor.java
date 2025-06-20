@@ -382,7 +382,7 @@ public class SymbolExtractor {
             Log.e("YourService", "Failed to flatten the image.");
             return null;
         }
-        Mat cropImage = flatImage;
+        Mat unwrappedImage = flatImage;
         if(!isAstronaut) {
             Dictionary arucoDict = Aruco.getPredefinedDictionary(Aruco.DICT_5X5_250);
             DetectorParameters detectorParams = DetectorParameters.create();
@@ -427,18 +427,18 @@ public class SymbolExtractor {
                     markerCorners[i][1] = cornerData[i * 2 + 1]; // y
                 }
             }
-            cropImage = cropImage(flatImage, markerCorners);
+            Mat cropImage = cropImage(flatImage, markerCorners);
             if (cropImage.empty()) {
                 Log.e("YourService", "Failed to crop the image.");
                 return null; // Fail quietly
             }
+            unwrappedImage = unwrapImage(cropImage,targetID);
+            if (unwrappedImage.empty()) {
+                Log.e("YourService", "Failed to unwrap the image.");
+                return null; // Fail quietly
+            }
+            org.opencv.imgproc.Imgproc.resize(unwrappedImage, unwrappedImage, new org.opencv.core.Size(800, unwrappedImage.rows() * 800.0 / unwrappedImage.cols()));
         }
-        Mat unwrappedImage = unwrapImage(cropImage,targetID);
-        if (unwrappedImage.empty()) {
-            Log.e("YourService", "Failed to unwrap the image.");
-            return null; // Fail quietly
-        }
-        org.opencv.imgproc.Imgproc.resize(unwrappedImage, unwrappedImage, new org.opencv.core.Size(800, unwrappedImage.rows() * 800.0 / unwrappedImage.cols()));
         Log.i("YourService", "Image successfully processed and unwrapped.");
         return cropAroundArucoById(unwrappedImage, targetID);
     }

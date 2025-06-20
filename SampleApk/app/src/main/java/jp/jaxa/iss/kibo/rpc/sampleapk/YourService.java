@@ -71,8 +71,8 @@ public class YourService extends KiboRpcService {
         String[] targetItemsInArea = new String[4];
 
         locations[0] = new WorldPose(new Point(10.9922d, -9.4623d, 5.2776d),new Quaternion(0f, 0f, -0.7071f, 0.7071f));
-        locations[1] = new WorldPose(new Point(11.0106d, -8.97148d, 4.97973d), new Quaternion(0f, 0.707f, 0f, 0.707f));
-        locations[2] = new WorldPose(new Point(11.0106d, -7.8828d, 4.87863d), new Quaternion(0f, 0.707f, 0f, 0.707f));
+        locations[1] = new WorldPose(new Point(11.0106d, -8.875d, 4.66203d), new Quaternion(0.5f, 0.5f, -0.5f, 0.5f));
+        locations[2] = new WorldPose(new Point(11.0106d, -7.95d, 4.66093d), new Quaternion(0.5f, 0.5f, -0.5f, 0.5f));
         locations[3] = new WorldPose(new Point(10.984684d, -6.8947d, 5.0276d), new Quaternion(0f, 0f, 1f, 0f));
         // --- Area 1 ---
         Integer[] ids = {101,102,103,104};
@@ -248,6 +248,7 @@ public class YourService extends KiboRpcService {
         }
 
         Log.i(TAG, "Target class items identified in areas 1-4: " + Arrays.toString(targetItemsInArea));
+        restrict();
         api.reportRoundingCompletion();
 
         // --- Astronaut Recognition ---
@@ -338,6 +339,25 @@ public class YourService extends KiboRpcService {
         // write your plan 3 here.
     }
 
+    private void restrict() {
+        for (int i = 0; i < 4; i++) {
+            Point position = locations[i].position;
+            Quaternion orientation = locations[i].orientation;
+            double x = position.getX();
+            double y = position.getY();
+            double z = position.getZ();
+
+            if (x < 10.25) x = 10.25;
+            if (x > 11.50) x = 11.50;
+            if (y < -10.15) y = -10.15;
+            if (y > -5.95) y = -5.95;
+            if (z < 4.27) z = 4.27;
+            if (z > 5.52) z = 5.52;
+
+            locations[i] = new WorldPose(new Point(x, y, z), orientation);
+        }
+    }
+
     private Mat extractSymbolFromCam(boolean isAstronaut,int targetId) {
         Mat image = api.getMatNavCam();
         for(int i = 0; i < 3 && image.empty(); i++) {
@@ -409,22 +429,22 @@ public class YourService extends KiboRpcService {
         Quaternion currentOrientation = locations[areaId-1].orientation;
         if(areaId == 1) {
             double x = currentPosition.getX() + distance[0];
-            double y = currentPosition.getY() - distance[2] + 0.7;
+            double y = currentPosition.getY() - distance[2] + 0.75;
             double z = currentPosition.getZ() + distance[1];
             finalLocations[0] = new WorldPose(new Point(x, y, z), currentOrientation);
             Log.i("ARucoPose", String.format("Final Location for Area 1: X=%.3f m, Y=%.3f m, Z=%.3f m",
                     x, y, z));
         }
         if(areaId == 2 || areaId == 3) {
-            double x = currentPosition.getX() - distance[1];
-            double y = currentPosition.getY() + distance[0];
-            double z = currentPosition.getZ() - distance[2] + 0.7;
+            double x = currentPosition.getX() + distance[0];
+            double y = currentPosition.getY() - distance[1];
+            double z = currentPosition.getZ() - distance[2] + 0.75;
             finalLocations[areaId-1] = new WorldPose(new Point(x, y, z), currentOrientation);
             Log.i("ARucoPose", String.format("Final Location for Area 2/3: X=%.3f m, Y=%.3f m, Z=%.3f m",
                     x, y, z));
         }
         if(areaId == 4) {
-            double x = currentPosition.getX() - distance[2] + 0.7;
+            double x = currentPosition.getX() - distance[2] + 0.75;
             double y = currentPosition.getY() + distance[0];
             double z = currentPosition.getZ() + distance[1];
             finalLocations[3] = new WorldPose(new Point(x, y, z), currentOrientation);
